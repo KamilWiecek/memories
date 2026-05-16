@@ -74,11 +74,75 @@ App for dumping memories, so they never slip away. Records audio in the browser,
 
 ## Local Development
 
-Requirements: [Docker](https://docs.docker.com/get-docker/), [kind](https://kind.sigs.k8s.io/), [kubectl](https://kubernetes.io/docs/tasks/tools/)
+### Prerequisites
+
+| Tool | Purpose |
+|---|---|
+| [Docker](https://docs.docker.com/get-docker/) | Build and run container images |
+| [kind](https://kind.sigs.k8s.io/) | Local Kubernetes cluster |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | Apply manifests and inspect resources |
+| [helm](https://helm.sh/docs/intro/install/) | Install nginx ingress controller |
+| [make](https://www.gnu.org/software/make/) | Convenience targets |
+
+### First-time setup
+
+**1. Configure secrets**
+
+Edit `k8s/base.yaml` and set the values in `memories-secret` before applying:
+
+- `AUTH_TOKENS` — one Bearer token per line (newline-separated, base64-encoded)
+- `DATABASE_URL` — Postgres connection string (defaults work for the in-cluster DB)
+
+**2. Bootstrap the cluster**
 
 ```bash
-make dev-up    # create kind cluster "memories" and apply all manifests
-make dev-down  # tear it down
+make dev-up
 ```
 
-See `Makefile` for all available targets.
+This creates a `kind` cluster named **`memories`**, builds all Docker images, loads them into the cluster, and applies every manifest under `k8s/`. The app is available at **http://localhost** when the pods are ready.
+
+### Make targets
+
+| Target | What it does |
+|---|---|
+| `make dev-up` | Create kind cluster, build + load images, apply all manifests |
+| `make dev-down` | Delete the kind cluster |
+| `make dev-images` | Rebuild images and reload them into the running cluster |
+| `make build` | Build all Docker images locally (no cluster needed) |
+| `make apply` | `kubectl apply -f k8s/` against the current cluster |
+
+### Iterating on code
+
+After changing Go or frontend files:
+
+```bash
+make dev-images
+kubectl rollout restart deployment/memories-api -n memories
+```
+
+The CronJob picks up the new image on the next scheduled run; trigger it immediately with:
+
+```bash
+kubectl create job -n memories --from=cronjob/memories-cronjob adhoc-$(date +%s)
+```
+
+### Accessing the app
+
+Open **http://localhost** in a browser. You will be prompted for a Bearer token — use any value you set in `AUTH_TOKENS` when configuring the secret.
+
+### Troubleshooting
+
+```bash
+# Watch pod status
+kubectl get pods -n memories -w
+
+# API logs
+kubectl logs -n memories deployment/memories-api
+
+# Most recent CronJob run logs
+kubectl logs -n memories -l app=memories-cronjob --tail=100
+
+# Connect to Postgres directly
+kubectl exec -n memories -it statefulset/memories-postgres -- \
+  psql -U memories -d memories
+```

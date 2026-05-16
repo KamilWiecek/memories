@@ -1,0 +1,40 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: memories
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: audio-pvc
+  namespace: memories
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+---
+# Edit AUTH_TOKENS and DATABASE_URL before applying.
+# AUTH_TOKENS: one Bearer token per line (plain text, not base64 — stringData handles encoding).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: memories-secret
+  namespace: memories
+type: Opaque
+stringData:
+  AUTH_TOKENS: |
+    change-me-token
+  DATABASE_URL: postgres://memories:memories@memories-postgres:5432/memories?sslmode=disable
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: memories-config
+  namespace: memories
+data:
+  AUDIO_DIR: /data/audio
+  WHISPER_MODEL: base
+  PORT: "8080"
