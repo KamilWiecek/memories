@@ -1,0 +1,94 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: memories
+data:
+  01-schema.sql: |
+    CREATE TYPE memory_status AS ENUM ('pending', 'processing', 'done', 'failed');
+
+    CREATE TABLE IF NOT EXISTS memories (
+      id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+      audio_path TEXT        NOT NULL,
+      transcript TEXT,
+      status     memory_status NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS memories_status_idx ON memories (status);
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: memories-postgres
+  namespace: memories
+spec:
+  clusterIP: None
+  selector:
+    app: memories-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: memories-postgres
+  namespace: memories
+spec:
+  serviceName: memories-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memories-postgres
+  template:
+    metadata:
+      labels:
+        app: memories-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: memories
+            - name: POSTGRES_DB
+              value: memories
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: memories-secret
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "memories"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "memories"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

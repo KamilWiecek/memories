@@ -142,7 +142,23 @@ kubectl logs -n memories deployment/memories-api
 # Most recent CronJob run logs
 kubectl logs -n memories -l app=memories-cronjob --tail=100
 
-# Connect to Postgres directly
+# Connect to Postgres directly (in-cluster exec)
 kubectl exec -n memories -it statefulset/memories-postgres -- \
   psql -U memories -d memories
+
+# Connect from your local machine via port-forward
+kubectl port-forward -n memories statefulset/memories-postgres 5432:5432 &
+psql "postgres://memories:memories@localhost:5432/memories"
+# — or with individual flags:
+psql -h localhost -p 5432 -U memories -d memories
+# Stop the port-forward when done:
+kill %1
+
+# Useful queries once connected:
+# List all memories
+SELECT id, status, created_at, left(transcript, 60) FROM memories ORDER BY created_at DESC;
+# Count by status
+SELECT status, count(*) FROM memories GROUP BY status;
+# Inspect table structure
+\d memories
 ```

@@ -28,6 +28,7 @@ stringData:
   AUTH_TOKENS: |
     change-me-token
   DATABASE_URL: postgres://memories:memories@memories-postgres:5432/memories?sslmode=disable
+  POSTGRES_PASSWORD: memories
 ---
 apiVersion: v1
 kind: ConfigMap
