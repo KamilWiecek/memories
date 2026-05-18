@@ -27,21 +27,13 @@ type Memory struct {
 
 var (
 	db         *sql.DB
-	authTokens map[string]struct{}
-	audioDir   string
+	audioDir string
 )
 
 func main() {
 	dbURL := mustEnv("DATABASE_URL")
 	audioDir = mustEnv("AUDIO_DIR")
 	port := envOr("PORT", "8080")
-
-	authTokens = make(map[string]struct{})
-	for _, t := range strings.Split(mustEnv("AUTH_TOKENS"), "\n") {
-		if t = strings.TrimSpace(t); t != "" {
-			authTokens[t] = struct{}{}
-		}
-	}
 
 	if err := os.MkdirAll(audioDir, 0755); err != nil {
 		log.Fatalf("create audio dir: %v", err)
@@ -58,8 +50,8 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handleHealthz)
-	mux.HandleFunc("/api/upload", authMiddleware(handleUpload))
-	mux.HandleFunc("/api/memories", authMiddleware(handleMemories))
+	mux.HandleFunc("/api/upload", handleUpload)
+	mux.HandleFunc("/api/memories", handleMemories)
 	mux.HandleFunc("/", handleIndex)
 
 	log.Printf("listening on :%s", port)
@@ -88,17 +80,6 @@ func handleHealthz(w http.ResponseWriter, r *http.Request) {
 func handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(static.IndexHTML)
-}
-
-func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if _, ok := authTokens[token]; !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		next(w, r)
-	}
 }
 
 func handleUpload(w http.ResponseWriter, r *http.Request) {

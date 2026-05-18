@@ -16,8 +16,6 @@ spec:
     requests:
       storage: 10Gi
 ---
-# Edit AUTH_TOKENS and DATABASE_URL before applying.
-# AUTH_TOKENS: one Bearer token per line (plain text, not base64 — stringData handles encoding).
 apiVersion: v1
 kind: Secret
 metadata:
@@ -25,8 +23,6 @@ metadata:
   namespace: memories
 type: Opaque
 stringData:
-  AUTH_TOKENS: |
-    change-me-token
   DATABASE_URL: postgres://memories:memories@memories-postgres:5432/memories?sslmode=disable
   POSTGRES_PASSWORD: memories
 ---

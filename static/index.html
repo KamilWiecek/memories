@@ -8,10 +8,6 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; max-width: 640px; margin: 0 auto; padding: 1.5rem; color: #222; }
     h1 { margin-bottom: 1.5rem; font-size: 1.5rem; }
-    #auth { margin-bottom: 1.5rem; display: flex; gap: .5rem; align-items: center; }
-    #auth input { padding: .4rem .6rem; border: 1px solid #ccc; border-radius: 4px; flex: 1; max-width: 320px; }
-    #auth button { padding: .4rem .8rem; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; background: #f5f5f5; }
-    #auth button:hover { background: #e8e8e8; }
     #record-btn {
       padding: .55rem 1.2rem; font-size: .95rem; cursor: pointer;
       background: #c53030; color: #fff; border: none; border-radius: 6px;
@@ -36,27 +32,11 @@
 <body>
   <h1>Memories</h1>
 
-  <div id="auth">
-    <input id="token-input" type="password" placeholder="Bearer token" autocomplete="current-password">
-    <button onclick="saveToken()">Save token</button>
-  </div>
-
   <button id="record-btn" onclick="toggleRecord()">&#9679; Record</button>
   <div id="status"></div>
   <div id="memories"></div>
 
 <script>
-const getToken = () => localStorage.getItem('token') || '';
-
-function saveToken() {
-  const val = document.getElementById('token-input').value.trim();
-  if (!val) return;
-  localStorage.setItem('token', val);
-  document.getElementById('token-input').value = '';
-  setStatus('Token saved');
-  loadMemories();
-}
-
 function setStatus(msg) {
   document.getElementById('status').textContent = msg;
 }
@@ -99,15 +79,10 @@ async function toggleRecord() {
 }
 
 async function upload(blob, mimeType) {
-  if (!getToken()) { setStatus('Set a Bearer token first'); return; }
   const form = new FormData();
   form.append('audio', blob, 'recording' + extFor(mimeType));
   try {
-    const res = await fetch('/api/upload', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + getToken() },
-      body: form,
-    });
+    const res = await fetch('/api/upload', { method: 'POST', body: form });
     if (!res.ok) { setStatus('Upload failed (' + res.status + ')'); return; }
     setStatus('Uploaded — transcription pending');
     await loadMemories();
@@ -125,12 +100,9 @@ function extFor(mime) {
 }
 
 async function loadMemories() {
-  if (!getToken()) return;
   try {
-    const res = await fetch('/api/memories', {
-      headers: { Authorization: 'Bearer ' + getToken() },
-    });
-    if (!res.ok) { setStatus('Auth failed — check your token'); return; }
+    const res = await fetch('/api/memories');
+    if (!res.ok) { setStatus('Failed to load memories (' + res.status + ')'); return; }
     render(await res.json());
   } catch (e) {
     setStatus('Failed to load memories');
@@ -145,14 +117,13 @@ function render(memories) {
   }
   el.innerHTML = memories.map(m => {
     const date = new Date(m.created_at).toLocaleString();
-    const statusClass = m.status;
     const isDone = m.status === 'done';
     const textClass = isDone ? '' : ' placeholder';
     const text = isDone ? escHtml(m.transcript || '') : m.status + '…';
     return `<div class="memory">
       <div class="memory-meta">
         <span>${date}</span>
-        <span class="memory-status ${statusClass}">${m.status}</span>
+        <span class="memory-status ${m.status}">${m.status}</span>
       </div>
       <div class="memory-text${textClass}">${text}</div>
     </div>`;
@@ -167,15 +138,8 @@ function escHtml(s) {
     .replace(/\n/g, '<br>');
 }
 
-// on load, try to restore token and show memories
-document.getElementById('token-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') saveToken();
-});
-
-if (getToken()) loadMemories();
-
-// poll every 10 s to catch transcription completions
-setInterval(() => { if (getToken()) loadMemories(); }, 10000);
+loadMemories();
+setInterval(loadMemories, 10000);
 </script>
 </body>
 </html>
