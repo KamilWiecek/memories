@@ -8,31 +8,51 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; max-width: 640px; margin: 0 auto; padding: 1.5rem; color: #222; }
     h1 { margin-bottom: 1.5rem; font-size: 1.5rem; }
+    .toolbar { display: flex; gap: .5rem; align-items: flex-start; margin-bottom: 1rem; }
     #record-btn {
-      padding: .55rem 1.2rem; font-size: .95rem; cursor: pointer;
+      padding: .55rem 1.2rem; font-size: .95rem; cursor: pointer; white-space: nowrap;
       background: #c53030; color: #fff; border: none; border-radius: 6px;
-      display: inline-flex; align-items: center; gap: .4rem;
     }
     #record-btn:hover { background: #9b2c2c; }
     #record-btn.recording { background: #4a5568; }
     #record-btn.recording:hover { background: #2d3748; }
-    #status { margin: .6rem 0 1.5rem; font-size: .85rem; color: #718096; min-height: 1.1em; }
-    .memory { border-bottom: 1px solid #eee; padding: .8rem 0; }
+    .text-input-wrap { display: flex; gap: .4rem; flex: 1; }
+    #text-input { flex: 1; padding: .45rem .6rem; border: 1px solid #cbd5e0; border-radius: 6px; font: inherit; font-size: .9rem; }
+    #add-text-btn { padding: .45rem .9rem; background: #2b6cb0; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: .9rem; white-space: nowrap; }
+    #add-text-btn:hover { background: #2c5282; }
+    #status { margin-bottom: 1.2rem; font-size: .85rem; color: #718096; min-height: 1.1em; }
+    .memory { border-bottom: 1px solid #eee; padding: .8rem 0; position: relative; }
     .memory:last-child { border-bottom: none; }
-    .memory-meta { font-size: .75rem; color: #a0aec0; margin-bottom: .3rem; display: flex; gap: .75rem; }
+    .memory-meta { font-size: .75rem; color: #a0aec0; margin-bottom: .3rem; display: flex; gap: .75rem; align-items: center; }
     .memory-status { text-transform: uppercase; letter-spacing: .03em; font-weight: 600; }
     .memory-status.done { color: #48bb78; }
     .memory-status.processing, .memory-status.pending { color: #ed8936; }
     .memory-status.failed { color: #fc8181; }
-    .memory-text { line-height: 1.5; }
-    .memory-text.placeholder { color: #a0aec0; font-style: italic; }
+    .btn-delete { margin-left: auto; background: none; border: none; cursor: pointer; color: #cbd5e0; font-size: .95rem; padding: 0 .2rem; line-height: 1; }
+    .btn-delete:hover { color: #fc8181; }
+    .memory-text { line-height: 1.5; cursor: pointer; }
+    .memory-text:hover { background: #f7fafc; border-radius: 3px; }
+    .memory-text.placeholder { color: #a0aec0; font-style: italic; cursor: default; }
+    .memory-text.placeholder:hover { background: none; }
+    .edit-area { width: 100%; min-height: 80px; padding: .4rem .5rem; border: 1px solid #cbd5e0; border-radius: 4px; font: inherit; font-size: .95rem; line-height: 1.5; resize: vertical; }
+    .edit-actions { display: flex; gap: .5rem; margin-top: .4rem; }
+    .btn-save { padding: .3rem .8rem; background: #3182ce; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: .85rem; }
+    .btn-save:hover { background: #2b6cb0; }
+    .btn-cancel { padding: .3rem .8rem; background: #edf2f7; border: none; border-radius: 4px; cursor: pointer; font-size: .85rem; }
+    .btn-cancel:hover { background: #e2e8f0; }
     #empty { color: #a0aec0; margin-top: 1rem; }
   </style>
 </head>
 <body>
   <h1>Memories</h1>
 
-  <button id="record-btn" onclick="toggleRecord()">&#9679; Record</button>
+  <div class="toolbar">
+    <button id="record-btn" onclick="toggleRecord()">&#9679; Record</button>
+    <div class="text-input-wrap">
+      <input id="text-input" type="text" placeholder="Type a memory…">
+      <button id="add-text-btn" onclick="addText()">Add</button>
+    </div>
+  </div>
   <div id="status"></div>
   <div id="memories"></div>
 
@@ -40,6 +60,8 @@
 function setStatus(msg) {
   document.getElementById('status').textContent = msg;
 }
+
+// ── Recording ────────────────────────────────────────────────────────────────
 
 let mediaRecorder = null;
 let chunks = [];
@@ -49,7 +71,6 @@ async function toggleRecord() {
     mediaRecorder.stop();
     return;
   }
-
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -57,10 +78,8 @@ async function toggleRecord() {
     setStatus('Microphone access denied');
     return;
   }
-
   chunks = [];
   mediaRecorder = new MediaRecorder(stream);
-
   mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
   mediaRecorder.onstop = async () => {
     stream.getTracks().forEach(t => t.stop());
@@ -68,9 +87,8 @@ async function toggleRecord() {
     btn.classList.remove('recording');
     btn.innerHTML = '&#9679; Record';
     setStatus('Uploading…');
-    await upload(new Blob(chunks, { type: mediaRecorder.mimeType }), mediaRecorder.mimeType);
+    await uploadAudio(new Blob(chunks, { type: mediaRecorder.mimeType }), mediaRecorder.mimeType);
   };
-
   mediaRecorder.start();
   const btn = document.getElementById('record-btn');
   btn.classList.add('recording');
@@ -78,7 +96,7 @@ async function toggleRecord() {
   setStatus('Recording…');
 }
 
-async function upload(blob, mimeType) {
+async function uploadAudio(blob, mimeType) {
   const form = new FormData();
   form.append('audio', blob, 'recording' + extFor(mimeType));
   try {
@@ -99,6 +117,33 @@ function extFor(mime) {
   return '.audio';
 }
 
+// ── Text create ──────────────────────────────────────────────────────────────
+
+async function addText() {
+  const input = document.getElementById('text-input');
+  const text = input.value.trim();
+  if (!text) return;
+  try {
+    const res = await fetch('/api/memories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transcript: text }),
+    });
+    if (!res.ok) { setStatus('Create failed (' + res.status + ')'); return; }
+    input.value = '';
+    setStatus('');
+    await loadMemories();
+  } catch (e) {
+    setStatus('Create error: ' + e.message);
+  }
+}
+
+document.getElementById('text-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addText();
+});
+
+// ── List ─────────────────────────────────────────────────────────────────────
+
 async function loadMemories() {
   try {
     const res = await fetch('/api/memories');
@@ -112,7 +157,7 @@ async function loadMemories() {
 function render(memories) {
   const el = document.getElementById('memories');
   if (!memories || !memories.length) {
-    el.innerHTML = '<p id="empty">No memories yet — hit Record to add one.</p>';
+    el.innerHTML = '<p id="empty">No memories yet.</p>';
     return;
   }
   el.innerHTML = memories.map(m => {
@@ -120,15 +165,74 @@ function render(memories) {
     const isDone = m.status === 'done';
     const textClass = isDone ? '' : ' placeholder';
     const text = isDone ? escHtml(m.transcript || '') : m.status + '…';
-    return `<div class="memory">
+    const clickable = isDone ? ` onclick="startEdit('${m.id}', this)" title="Click to edit"` : '';
+    return `<div class="memory" data-id="${m.id}">
       <div class="memory-meta">
         <span>${date}</span>
         <span class="memory-status ${m.status}">${m.status}</span>
+        <button class="btn-delete" onclick="deleteMemory('${m.id}', this)" title="Delete">&#10005;</button>
       </div>
-      <div class="memory-text${textClass}">${text}</div>
+      <div class="memory-text${textClass}"${clickable}>${text}</div>
     </div>`;
   }).join('');
 }
+
+// ── Edit ─────────────────────────────────────────────────────────────────────
+
+function startEdit(id, textEl) {
+  const textarea = document.createElement('textarea');
+  textarea.className = 'edit-area';
+  textarea.value = textEl.innerText;
+
+  const actions = document.createElement('div');
+  actions.className = 'edit-actions';
+  actions.innerHTML = '<button class="btn-save">Save</button><button class="btn-cancel">Cancel</button>';
+  actions.querySelector('.btn-save').onclick = () => saveEdit(id, textarea.value, textEl, textarea, actions);
+  actions.querySelector('.btn-cancel').onclick = () => { actions.remove(); textarea.replaceWith(textEl); };
+
+  textEl.replaceWith(textarea);
+  textarea.after(actions);
+  textarea.focus();
+  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+}
+
+async function saveEdit(id, newText, textEl, textarea, actions) {
+  actions.querySelector('.btn-save').disabled = true;
+  try {
+    const res = await fetch('/api/memories/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transcript: newText }),
+    });
+    if (!res.ok) { setStatus('Save failed (' + res.status + ')'); actions.querySelector('.btn-save').disabled = false; return; }
+    const m = await res.json();
+    textEl.innerHTML = escHtml(m.transcript || '');
+    actions.remove();
+    textarea.replaceWith(textEl);
+    setStatus('');
+  } catch (e) {
+    setStatus('Save error: ' + e.message);
+    actions.querySelector('.btn-save').disabled = false;
+  }
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+async function deleteMemory(id, btn) {
+  if (!confirm('Delete this memory?')) return;
+  try {
+    const res = await fetch('/api/memories/' + id, { method: 'DELETE' });
+    if (!res.ok) { setStatus('Delete failed (' + res.status + ')'); return; }
+    btn.closest('.memory').remove();
+    if (!document.querySelector('.memory')) {
+      document.getElementById('memories').innerHTML = '<p id="empty">No memories yet.</p>';
+    }
+  } catch (e) {
+    setStatus('Delete error: ' + e.message);
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
 
 function escHtml(s) {
   return s

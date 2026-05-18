@@ -51,6 +51,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handleHealthz)
 	mux.HandleFunc("/api/upload", handleUpload)
+	mux.HandleFunc("/api/memories/", handleMemory)
 	mux.HandleFunc("/api/memories", handleMemories)
 	mux.HandleFunc("/", handleIndex)
 
@@ -131,8 +132,90 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(m)
 }
 
+func handleMemory(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/memories/")
+	if id == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+	switch r.Method {
+	case http.MethodPatch:
+		var body struct {
+			Transcript string `json:"transcript"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		var m Memory
+		err := db.QueryRow(
+			`UPDATE memories SET transcript=$1, status='done', updated_at=now()
+			 WHERE id=$2
+			 RETURNING id, transcript, status, created_at, updated_at`,
+			body.Transcript, id,
+		).Scan(&m.ID, &m.Transcript, &m.Status, &m.CreatedAt, &m.UpdatedAt)
+		if err == sql.ErrNoRows {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			log.Printf("update memory: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(m)
+
+	case http.MethodDelete:
+		var audioPath string
+		err := db.QueryRow(`DELETE FROM memories WHERE id=$1 RETURNING audio_path`, id).Scan(&audioPath)
+		if err == sql.ErrNoRows {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			log.Printf("delete memory: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		if audioPath != "" {
+			os.Remove(filepath.Join(audioDir, audioPath))
+		}
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
 func handleMemories(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodPost:
+		var body struct {
+			Transcript string `json:"transcript"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Transcript == "" {
+			http.Error(w, "transcript required", http.StatusBadRequest)
+			return
+		}
+		var m Memory
+		err := db.QueryRow(
+			`INSERT INTO memories (id, audio_path, transcript, status)
+			 VALUES ($1, '', $2, 'done')
+			 RETURNING id, transcript, status, created_at, updated_at`,
+			newUUID(), body.Transcript,
+		).Scan(&m.ID, &m.Transcript, &m.Status, &m.CreatedAt, &m.UpdatedAt)
+		if err != nil {
+			log.Printf("insert text memory: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(m)
+		return
+	case http.MethodGet:
+	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
