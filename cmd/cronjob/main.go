@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,7 +16,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-const whisperBase = "http://localhost:9000"
+const whisperAPI = "https://api.openai.com/v1/audio/transcriptions"
 
 type pendingMemory struct {
 	ID        string
@@ -25,6 +26,7 @@ type pendingMemory struct {
 func main() {
 	dbURL := mustEnv("DATABASE_URL")
 	audioDir := mustEnv("AUDIO_DIR")
+	apiKey := mustEnv("OPENAI_API_KEY")
 
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -36,10 +38,6 @@ func main() {
 		log.Fatalf("db not ready: %v", err)
 	}
 
-	if err := waitForWhisper(); err != nil {
-		log.Fatalf("whisper not ready: %v", err)
-	}
-
 	pending, err := claimPending(db)
 	if err != nil {
 		log.Fatalf("claim pending: %v", err)
@@ -48,7 +46,7 @@ func main() {
 
 	for _, m := range pending {
 		fullPath := filepath.Join(audioDir, m.AudioPath)
-		transcript, err := transcribe(fullPath)
+		transcript, err := transcribe(apiKey, fullPath)
 		if err != nil {
 			log.Printf("transcribe %s: %v", m.ID, err)
 			if _, dbErr := db.Exec(
@@ -66,8 +64,6 @@ func main() {
 		}
 		log.Printf("done %s", m.ID)
 	}
-
-	shutdownWhisper()
 }
 
 func claimPending(db *sql.DB) ([]pendingMemory, error) {
@@ -104,53 +100,51 @@ func waitForDB(db *sql.DB) error {
 	return fmt.Errorf("timed out")
 }
 
-func waitForWhisper() error {
-	client := &http.Client{Timeout: 5 * time.Second}
-	for i := 0; i < 60; i++ {
-		resp, err := client.Get(whisperBase + "/health")
-		if err == nil {
-			resp.Body.Close()
-			if resp.StatusCode == 200 {
-				return nil
-			}
-		}
-		log.Printf("waiting for whisper (%d/60)…", i+1)
-		time.Sleep(5 * time.Second)
-	}
-	return fmt.Errorf("timed out")
-}
-
-func transcribe(audioPath string) (string, error) {
-	body, _ := json.Marshal(map[string]string{"audio_path": audioPath})
-	resp, err := http.Post(whisperBase+"/transcribe", "application/json", bytes.NewReader(body))
+func transcribe(apiKey, audioPath string) (string, error) {
+	f, err := os.Open(audioPath)
 	if err != nil {
-		return "", fmt.Errorf("post: %w", err)
+		return "", fmt.Errorf("open audio: %w", err)
+	}
+	defer f.Close()
+
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	fw, err := w.CreateFormFile("file", filepath.Base(audioPath))
+	if err != nil {
+		return "", err
+	}
+	if _, err := io.Copy(fw, f); err != nil {
+		return "", err
+	}
+	w.WriteField("model", "whisper-1")
+	w.WriteField("language", "pl")
+	w.Close()
+
+	req, err := http.NewRequest(http.MethodPost, whisperAPI, &buf)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("api call: %w", err)
 	}
 	defer resp.Body.Close()
+
 	data, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("status %d: %s", resp.StatusCode, data)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("api status %d: %s", resp.StatusCode, data)
 	}
+
 	var result struct {
-		Transcript string `json:"transcript"`
-		Error      string `json:"error"`
+		Text string `json:"text"`
 	}
 	if err := json.Unmarshal(data, &result); err != nil {
 		return "", fmt.Errorf("parse response: %w", err)
 	}
-	if result.Error != "" {
-		return "", fmt.Errorf("%s", result.Error)
-	}
-	return result.Transcript, nil
-}
-
-func shutdownWhisper() {
-	resp, err := http.Post(whisperBase+"/shutdown", "application/json", nil)
-	if err != nil {
-		log.Printf("shutdown whisper: %v", err)
-		return
-	}
-	resp.Body.Close()
+	return result.Text, nil
 }
 
 func mustEnv(key string) string {

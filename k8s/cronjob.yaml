@@ -25,15 +25,6 @@ spec:
               volumeMounts:
                 - name: audio
                   mountPath: /data/audio
-            - name: whisper
-              image: memories-whisper:local
-              imagePullPolicy: Never
-              envFrom:
-                - configMapRef:
-                    name: memories-config
-              volumeMounts:
-                - name: audio
-                  mountPath: /data/audio
           volumes:
             - name: audio
               persistentVolumeClaim:

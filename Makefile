@@ -5,7 +5,6 @@ CLUSTER := memories
 build:
 	docker build -t memories-api:local -f cmd/api/Dockerfile .
 	docker build -t memories-cronjob:local -f cmd/cronjob/Dockerfile .
-	docker build -t memories-whisper:local -f whisper/Dockerfile .
 
 dev-up:
 	kind get clusters | grep -qx $(CLUSTER) || kind create cluster --name $(CLUSTER) --config kind-config.yaml
@@ -34,7 +33,6 @@ apply:
 _load:
 	kind load docker-image memories-api:local     --name $(CLUSTER)
 	kind load docker-image memories-cronjob:local --name $(CLUSTER)
-	kind load docker-image memories-whisper:local --name $(CLUSTER)
 
 help:
 	@echo "Targets: build  dev-up  dev-down  dev-images  apply"
