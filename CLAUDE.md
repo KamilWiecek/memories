@@ -5,6 +5,8 @@ Design docs (architecture, requirements, components): [README.md](README.md)
 
 ## Principles
 
+- KEEP LINEAR ISSUES STATUS UP TO DATE
+- ALWAYS AFTER IMPLEMENTING NEW FEATURE CHECK IF DEV ENVIRONMENT CAN BE CREATED
 - README.md is the authoritative design reference — respect it
 - Seek simplicity; no abstractions beyond what the task requires
 - Same k8s manifests must work on both kind (local) and k3s (production)

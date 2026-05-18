@@ -8,9 +8,8 @@ build:
 	docker build -t memories-whisper:local -f whisper/Dockerfile .
 
 dev-up:
-	kind create cluster --name $(CLUSTER) --config kind-config.yaml
+	kind get clusters | grep -qx $(CLUSTER) || kind create cluster --name $(CLUSTER) --config kind-config.yaml
 	helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx --force-update
-	helm repo add cnpg https://cloudnative-pg.github.io/charts --force-update
 	helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
 	  --namespace ingress-nginx --create-namespace \
 	  --set controller.hostPort.enabled=true \
@@ -19,9 +18,8 @@ dev-up:
 	  --set 'controller.tolerations[0].effect=NoSchedule' \
 	  --set-string 'controller.nodeSelector.ingress-ready=true' \
 	  --wait
-	helm upgrade --install cnpg cnpg/cloudnative-pg \
-	  --namespace cnpg-system --create-namespace \
-	  --wait
+	$(MAKE) build _load
+	kubectl apply -f k8s/base.yaml
 	kubectl apply -f k8s/
 
 dev-down:
@@ -30,6 +28,7 @@ dev-down:
 dev-images: build _load
 
 apply:
+	kubectl apply -f k8s/base.yaml
 	kubectl apply -f k8s/
 
 _load:

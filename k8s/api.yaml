@@ -1,0 +1,78 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memories-api
+  namespace: memories
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memories-api
+  template:
+    metadata:
+      labels:
+        app: memories-api
+    spec:
+      containers:
+        - name: api
+          image: memories-api:local
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: memories-secret
+            - configMapRef:
+                name: memories-config
+          volumeMounts:
+            - name: audio
+              mountPath: /data/audio
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: audio
+          persistentVolumeClaim:
+            claimName: audio-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: memories-api
+  namespace: memories
+spec:
+  selector:
+    app: memories-api
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: memories-ingress
+  namespace: memories
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 50m
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: memories-api
+                port:
+                  number: 80

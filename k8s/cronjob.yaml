@@ -1,0 +1,40 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: memories-cronjob
+  namespace: memories
+spec:
+  schedule: "*/2 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 300
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: cronjob
+              image: memories-cronjob:local
+              imagePullPolicy: Never
+              envFrom:
+                - secretRef:
+                    name: memories-secret
+                - configMapRef:
+                    name: memories-config
+              volumeMounts:
+                - name: audio
+                  mountPath: /data/audio
+            - name: whisper
+              image: memories-whisper:local
+              imagePullPolicy: Never
+              envFrom:
+                - configMapRef:
+                    name: memories-config
+              volumeMounts:
+                - name: audio
+                  mountPath: /data/audio
+          volumes:
+            - name: audio
+              persistentVolumeClaim:
+                claimName: audio-pvc
