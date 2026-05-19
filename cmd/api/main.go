@@ -193,17 +193,24 @@ func handleMemories(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		var body struct {
 			Transcript string `json:"transcript"`
+			Date       string `json:"date"` // optional, YYYY-MM-DD
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Transcript == "" {
 			http.Error(w, "transcript required", http.StatusBadRequest)
 			return
 		}
+		ts := time.Now()
+		if body.Date != "" {
+			if d, err := time.ParseInLocation("2006-01-02", body.Date, time.Local); err == nil {
+				ts = d
+			}
+		}
 		var m Memory
 		err := db.QueryRow(
-			`INSERT INTO memories (id, audio_path, transcript, status)
-			 VALUES ($1, '', $2, 'done')
+			`INSERT INTO memories (id, audio_path, transcript, status, created_at, updated_at)
+			 VALUES ($1, '', $2, 'done', $3, $3)
 			 RETURNING id, transcript, status, created_at, updated_at`,
-			newUUID(), body.Transcript,
+			newUUID(), body.Transcript, ts,
 		).Scan(&m.ID, &m.Transcript, &m.Status, &m.CreatedAt, &m.UpdatedAt)
 		if err != nil {
 			log.Printf("insert text memory: %v", err)

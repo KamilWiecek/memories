@@ -16,8 +16,9 @@
     #record-btn:hover { background: #9b2c2c; }
     #record-btn.recording { background: #4a5568; }
     #record-btn.recording:hover { background: #2d3748; }
-    .text-input-wrap { display: flex; gap: .4rem; flex: 1; }
-    #text-input { flex: 1; padding: .45rem .6rem; border: 1px solid #cbd5e0; border-radius: 6px; font: inherit; font-size: .9rem; }
+    .text-input-wrap { display: flex; gap: .4rem; flex: 1; flex-wrap: wrap; }
+    #text-input { flex: 1; min-width: 120px; padding: .45rem .6rem; border: 1px solid #cbd5e0; border-radius: 6px; font: inherit; font-size: .9rem; }
+    #memory-date { padding: .45rem .6rem; border: 1px solid #cbd5e0; border-radius: 6px; font: inherit; font-size: .9rem; color: #555; }
     #add-text-btn { padding: .45rem .9rem; background: #2b6cb0; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: .9rem; white-space: nowrap; }
     #add-text-btn:hover { background: #2c5282; }
     #status { margin-bottom: 1.2rem; font-size: .85rem; color: #718096; min-height: 1.1em; }
@@ -50,6 +51,7 @@
     <button id="record-btn" onclick="toggleRecord()">&#9679; Record</button>
     <div class="text-input-wrap">
       <input id="text-input" type="text" placeholder="Type a memory…">
+      <input id="memory-date" type="date">
       <button id="add-text-btn" onclick="addText()">Add</button>
     </div>
   </div>
@@ -123,11 +125,12 @@ async function addText() {
   const input = document.getElementById('text-input');
   const text = input.value.trim();
   if (!text) return;
+  const date = document.getElementById('memory-date').value; // YYYY-MM-DD or ''
   try {
     const res = await fetch('/api/memories', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transcript: text }),
+      body: JSON.stringify({ transcript: text, date }),
     });
     if (!res.ok) { setStatus('Create failed (' + res.status + ')'); return; }
     input.value = '';
@@ -241,6 +244,8 @@ function escHtml(s) {
     .replace(/>/g, '&gt;')
     .replace(/\n/g, '<br>');
 }
+
+document.getElementById('memory-date').value = new Date().toISOString().slice(0, 10);
 
 loadMemories();
 setInterval(loadMemories, 10000);
