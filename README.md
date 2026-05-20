@@ -88,10 +88,28 @@ App for dumping memories, so they never slip away. Records audio in the browser,
 
 **1. Configure secrets**
 
-Edit `k8s/base.yaml` and set the values in `memories-secret` before applying:
+Secrets live in `k8s/secret.yaml` (not committed to git). Create the file before applying:
 
-- `AUTH_TOKENS` — one Bearer token per line (newline-separated, base64-encoded)
-- `DATABASE_URL` — Postgres connection string (defaults work for the in-cluster DB)
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: memories-secret
+  namespace: memories
+type: Opaque
+stringData:
+  OPENAI_API_KEY: sk-...          # required — used by the CronJob to call Whisper API
+  DATABASE_URL: postgres://memories:memories@memories-postgres:5432/memories?sslmode=disable
+  POSTGRES_PASSWORD: memories     # must match DATABASE_URL
+```
+
+| Key | Required | Notes |
+|---|---|---|
+| `OPENAI_API_KEY` | Yes | OpenAI API key for audio transcription |
+| `DATABASE_URL` | Yes | Postgres DSN — default works for the in-cluster DB |
+| `POSTGRES_PASSWORD` | Yes | Must match the password in `DATABASE_URL` |
+
+Access control is handled by an OAuth proxy in front of the app — no token config needed here.
 
 **2. Bootstrap the cluster**
 
